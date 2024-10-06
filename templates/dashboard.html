@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Sensor Data Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="/static/styles.css">
+    <!-- 
+    Author: Ivan Jovanovski
+    Date: October 6, 2024
+    Description: This web page displays sensor data (temperature, humidity, soil moisture, distance, rain intensity, and servo position)
+                 collected from two ESP32 devices in real-time, including a radar visual for tracking the servo and distance. 
+    -->
+</head>
+<body>
+    <h1>ESP32 Sensor Data Dashboard</h1>
+
+    <div class="container">
+        <div class="sensor-box">
+            <canvas id="radar" width="300" height="150"></canvas>
+            <p>Servo Position: <span id="servoPos">0</span>°</p>
+            <p>Distance: <span id="distance">0</span> cm</p>
+        </div>
+
+       
+        <div class="sensor-data">
+            <div class="sensor-box">
+                <div class="sensor-title">Temperature</div>
+                <div class="sensor-value"><span id="temperature">0</span> °C</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">Humidity</div>
+                <div class="sensor-value"><span id="humidity">0</span> %</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">Soil Moisture</div>
+                <div class="sensor-value"><span id="soilMoisture">0</span> %</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">Rain Intensity</div>
+                <div class="sensor-value"><span id="rainIntensity">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>ESP32 Sensor Dashboard - Powered by Flask & ESP32</p>
+    </footer>
+
+    <script>
+        let radarPoints = [];  // Array to store last 5 points
+
+        // Function to draw radar
+        function drawRadar(servoPos, distance) {
+            const canvas = document.getElementById('radar');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the half-circle radar
+            ctx.beginPath();
+            ctx.arc(150, 150, 150, Math.PI, 2 * Math.PI);
+            ctx.stroke();
+
+            // Draw the current servo position line (turning line)
+            const angle = (Math.PI * servoPos) / 180;
+            ctx.beginPath();
+            ctx.moveTo(150, 150);
+            ctx.lineTo(150 + 150 * Math.cos(angle), 150 - 150 * Math.sin(angle));
+            ctx.stroke();
+
+            // Draw radar points
+            for (let i = 0; i < radarPoints.length; i++) {
+                const point = radarPoints[i];
+                const pointAngle = (Math.PI * point.servoPos) / 180;
+
+                // Fade effect: use progressively lighter shades of red
+                const fadeFactor = 1 - (i / radarPoints.length);  // Lighter for older points
+                ctx.fillStyle = `rgba(255, 0, 0, ${fadeFactor})`;
+
+                // Scale the distance to fit the canvas
+                const distanceScale = (point.distance / 30) * 150;  // Max distance = 30 cm
+
+                // Draw the radar point
+                ctx.beginPath();
+                ctx.arc(150 + distanceScale * Math.cos(pointAngle), 150 - distanceScale * Math.sin(pointAngle), 5, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
+        // Function to update radar and sensor data
+        function updateData() {
+            fetch('/get_data')  // Fetch sensor data from the Flask server
+                .then(response => response.json())
+                .then(data => {
+                    const servoPos = data.servo_position;
+                    const distance = data.distance;
+                    const temperature = data.temperature;
+                    const humidity = data.humidity;
+                    const soilMoisture = data.soil_moisture;
+                    const rainIntensity = data.rain_intensity;
+
+                    // Update HTML elements with the fetched data
+                    document.getElementById("servoPos").innerText = servoPos;
+                    document.getElementById("distance").innerText = distance;
+                    document.getElementById("temperature").innerText = temperature;
+                    document.getElementById("humidity").innerText = humidity;
+                    document.getElementById("soilMoisture").innerText = soilMoisture;
+                    document.getElementById("rainIntensity").innerText = rainIntensity;
+
+                    // Add the new radar point to the array
+                    radarPoints.unshift({ servoPos, distance });
+
+                    // Limit to the last 5 points
+                    if (radarPoints.length > 5) {
+                        radarPoints.pop();
+                    }
+
+                    // Update radar drawing
+                    drawRadar(servoPos, distance);
+                });
+        }
+
+        // Update radar and sensor data every 2 seconds
+        setInterval(updateData, 2000);
+    </script>
+</body>
+</html>
